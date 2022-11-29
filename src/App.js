@@ -1,128 +1,136 @@
 import "./App.css";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import breakTimeAudio from "./assets/audio/breakTime.wav";
 
 //components
-
 import Length from "./components/Length";
+import ButtonsControl from "./components/ButtonsControl";
+import DisplayTime from "./components/DisplayTime";
+import Footer from "./components/Footer";
 
 function App() {
-  const [displayTime, setDisplayTime] = useState(10);
-  const [breakTime, setBreakTime] = useState(3);
-  const [sessionTime, setSessionTime] = useState(10);
-  const [timerOn, setTimerOn] = useState(false);
-  const [onBreak, setOnBreak] = useState(false);
-  const [breakAudio, setBreakAudio] = useState(new Audio(breakTimeAudio));
+  const [displayTime, setDisplayTime] = useState(25 * 60);
+  const [breakTime, setBreakTime] = useState(5 * 60);
+  const [sessionTime, setSessionTime] = useState(25 * 60);
+  const [timerOn, setTimerOn] = useState(true);
+  const [timerLabel, setTimerLabel] = useState("session");
+  const breakAudio = useRef();
 
-  console.log(onBreak);
-
-  const playBreakSound = () => {
-    breakAudio.currentTime = 0;
-    breakAudio.play();
-  };
-
-  const formatTime = (time) => {
-    let minutes = Math.floor(time / 60);
-    let seconds = time % 60;
-    return (
-      (minutes < 10 ? "0" + minutes : minutes) +
-      ":" +
-      (seconds < 10 ? "0" + seconds : seconds)
-    );
-  };
-
-  const changeTime = (amount, type) => {
-    if (type == "break") {
-      if (breakTime <= 60 && amount < 0) {
-        return;
-      }
-      setBreakTime((prev) => prev + amount);
-    } else {
-      if (sessionTime <= 60 && amount < 0) {
-        return;
-      }
-      setSessionTime((prev) => prev + amount);
-      if (!timerOn) {
-        setDisplayTime(sessionTime + amount);
-      }
+  useEffect(() => {
+    if (displayTime === 0) {
+      playBreakSound();
     }
-  };
+  }, [displayTime]);
 
-  const controlTime = () => {
-    let second = 1000;
-    let date = new Date().getTime();
-    let nextDate = new Date().getTime() + second;
-    let onBreakVariable = onBreak;
+  useEffect(() => {
     if (!timerOn) {
       let interval = setInterval(() => {
-        date = new Date().getTime();
-        if (date > nextDate) {
-          setDisplayTime((prev) => {
-            if (prev <= 0 && !onBreakVariable) {
-              playBreakSound();
-              onBreakVariable = true;
-              setOnBreak(true);
-              return breakTime;
-            } else if (prev <= 0 && onBreakVariable) {
-              playBreakSound();
-              onBreakVariable = false;
-              setOnBreak(false);
-              return sessionTime;
-            }
-            return prev - 1;
-          });
-          nextDate += second;
-        }
-      }, 30);
+        setDisplayTime((prev) => {
+          if (prev === 0 && timerLabel === "session") {
+            setTimerLabel("break");
+            return breakTime;
+          } else if (prev === 0 && timerLabel !== "session") {
+            setTimerLabel("session");
+            return sessionTime;
+          }
+          return prev - 1;
+        });
+      }, 1000);
       localStorage.clear();
       localStorage.setItem("interval-id", interval);
     }
     if (timerOn) {
       clearInterval(localStorage.getItem("interval-id"));
     }
+
+    return () => clearInterval(localStorage.getItem("interval-id"));
+  }, [breakTime, displayTime, timerLabel, sessionTime, timerOn]);
+
+  const playBreakSound = () => {
+    if (breakAudio.current !== null) {
+      breakAudio.current.currentTime = 0;
+      breakAudio.current.play();
+    }
+  };
+
+  const changeTime = (amount, type) => {
+    if (type === "break") {
+      if (breakTime <= 60 && amount < 0) {
+        return;
+      } else if (breakTime >= 60 * 60) {
+        return;
+      }
+      setBreakTime((prev) => prev + amount);
+    } else {
+      if (sessionTime <= 60 && amount < 0) {
+        return;
+      } else if (sessionTime >= 60 * 60) {
+        return;
+      }
+      setSessionTime((prev) => prev + amount);
+      if (timerOn) {
+        setDisplayTime((prev) => prev + amount);
+      }
+    }
+  };
+
+  const controlTime = () => {
     setTimerOn(!timerOn);
   };
 
   const resetTime = () => {
+    clearInterval(localStorage.getItem("interval-id"));
+    setTimerOn(true);
     setDisplayTime(25 * 60);
     setBreakTime(5 * 60);
     setSessionTime(25 * 60);
+    setTimerLabel("session");
+    breakAudio.current.load();
   };
 
   return (
     <div className="App">
-      <main>
+      <main className="bg-black">
         <div className="container">
-          <h1>25 + 5 Clock</h1>
+          <div className="d-flex flex-column justify-content-center align-items-center vh-100 text-light">
+            <h1 className="p-2 fs-1 fw-semibold">Pomodoro Clock</h1>
 
-          <Length
-            title={"Break Length"}
-            changeTime={changeTime}
-            type={"break"}
-            time={breakTime}
-            formatTime={formatTime}
-          />
+            <div className="d-flex">
+              <Length
+                title={"Break Length"}
+                changeTime={changeTime}
+                type={"break"}
+                time={breakTime}
+              />
 
-          <Length
-            title={"Session Length"}
-            changeTime={changeTime}
-            type={"Session"}
-            time={sessionTime}
-            formatTime={formatTime}
-          />
+              <Length
+                title={"Session Length"}
+                changeTime={changeTime}
+                type={"session"}
+                time={sessionTime}
+              />
+            </div>
 
-          <h2>{onBreak ? "Break" : "Session"}</h2>
-          <h1>{formatTime(displayTime)}</h1>
-          <button className="btn btn-outline-secondary" onClick={controlTime}>
-            {timerOn ? (
-              <i className="fa-solid fa-circle-pause"></i>
-            ) : (
-              <i className="fa-solid fa-circle-play"></i>
-            )}
-          </button>
-          <button className="btn btn-outline-secondary" onClick={resetTime}>
-            <i className="fa-solid fa-rotate"></i>
-          </button>
+            <div>
+              <DisplayTime timerLabel={timerLabel} displayTime={displayTime} />
+            </div>
+
+            <div>
+              <ButtonsControl
+                controlTime={controlTime}
+                resetTime={resetTime}
+                timerOn={timerOn}
+              />
+            </div>
+            <Footer />
+          </div>
+
+          <audio
+            id="beep"
+            src={breakTimeAudio}
+            type="audio"
+            ref={breakAudio}
+          ></audio>
         </div>
       </main>
     </div>
